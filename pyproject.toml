@@ -1,0 +1,8 @@
+[project]
+name = "fmicl"
+version = "0.1.0"
+description = "PCA100 TCGA experiments for foundation-model in-context learning."
+requires-python = ">=3.12"
+
+[tool.setuptools]
+packages = ["fmicl"]

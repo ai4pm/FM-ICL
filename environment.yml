@@ -1,0 +1,17 @@
+name: fmicl
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - scikit-learn
+  - scipy
+  - matplotlib
+  - openpyxl
+  - pytorch
+  - pip
+  - pip:
+      - tabpfn
+      - xgboost

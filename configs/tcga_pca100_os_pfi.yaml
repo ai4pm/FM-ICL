@@ -1,0 +1,40 @@
+ancestry: AFR
+year: 2
+pca_dim: 100
+cancers:
+  - BRCA
+  - UCEC
+  - KIRC
+targets:
+  - OS
+  - PFI
+omics:
+  - mRNA
+  - MicroRNA
+  - Methylation
+tabpfn_n_estimators: 32
+budgets:
+  - budget1s
+  - budget5s
+  - budget30s
+  - budget5m
+  - budget1h
+radius_scales:
+  - 0.05
+  - 0.10
+  - 0.15
+  - 0.20
+  - 0.25
+  - 0.50
+  - 0.75
+  - 1.00
+  - 1.25
+  - 1.50
+  - 1.75
+  - 2.00
+  - 2.20
+  - 2.40
+  - 2.60
+  - 2.80
+  - 3.00
+

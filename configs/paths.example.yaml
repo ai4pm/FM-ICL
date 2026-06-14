@@ -1,0 +1,5 @@
+data_root: data/tcga
+result_root: /lustre/isaac24/scratch/wli66/tabular_transformer_transfer_learning/Result/TCGA
+label_cache_root: /lustre/isaac24/scratch/wli66/tabular_transformer_transfer_learning/Data/TCGA/ancestral_continuum
+method_result_dir: /nfs/home/wli66/tabular_transformer_transfer_learning/data_analytics/tcga/budget_curve_method_excels
+conda_env: py312
