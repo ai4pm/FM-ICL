@@ -611,9 +611,9 @@ def evaluate_knn_by_class_icl(args: argparse.Namespace, knn_k: int, source_data,
 
 def append_ds_tl_predictions(params: dict[str, Any], train_data, test_data, selected_ids, output) -> None:
     import torch
-
-    architecture, trainer = _resolve_tl_trainer("nn")
-    del architecture
+    from advanced_transfer_learning.Multimodal_NN.Multimodal_nn_utils import HParams as nn_HParams
+    from advanced_transfer_learning.Multimodal_NN.Multimodal_nn_utils import _probs_from_logits_binary
+    from advanced_transfer_learning.Multimodal_NN.Multimodal_nn_utils import train_binary_mlp as trainer
 
     train_src_X = []
     train_src_y = []
@@ -816,20 +816,6 @@ def fit_ds_tl_candidate(
         "pretrain_validation_cross_entropy": float(pretrain_val_ce),
         "validation_cross_entropy": float(finetune_val_ce),
     }
-
-
-def evaluate_candidate(args: argparse.Namespace, params: dict[str, Any], split_many_folds, selected_ids) -> dict[str, list]:
-    output = prediction_dict()
-    fold_count = len(split_many_folds) if not isinstance(split_many_folds, dict) else len(split_many_folds.keys())
-    for fold_idx in range(fold_count):
-        train_data, minority_test_data, _majority_test_data = split_many_folds[fold_idx]
-        if model_family(args.method) == "icl_min":
-            append_icl_predictions(args, params, train_data, minority_test_data, selected_ids, output)
-        elif args.method == "ds_tl":
-            append_ds_tl_predictions(params, train_data, minority_test_data, selected_ids, output)
-        else:
-            append_classical_predictions(args.method, params, train_data, minority_test_data, selected_ids, output, args.classical_n_jobs)
-    return output
 
 
 def evaluate_holdout(args: argparse.Namespace, params: dict[str, Any], train_data, holdout_data, selected_ids) -> dict[str, list]:

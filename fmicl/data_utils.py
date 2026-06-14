@@ -17,7 +17,6 @@ from finetune_tabpfn_v2.finetuning_scripts.finetune_tabpfn_main import fine_tune
 from helper_code.preProcess import tumor_types, get_mRNA, get_MicroRNA, get_Methylation, get_n_years, get_independent_data_single
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
-import pdb 
 
 # --------------- utitlity: classes ---------------
 class shhs_data_preprocess():
@@ -76,7 +75,7 @@ class data_preprocess():
             random_state=self.random_state
         )
         transformed_X_scaled = self.pca_.fit_transform(pre_X_scaled)
-        post_X_scaled = self.post_scaler_.fit_transform(transformed_X_scaled)
+        self.post_scaler_.fit(transformed_X_scaled)
 
     def transform(self, X):
         X_scaled = self.pre_scaler_.transform(X)
@@ -793,7 +792,7 @@ def get_available_shhs_endpoint_types(dic: Dict,min_num: int, min_ratio: float) 
         keys = list(dic[name].keys())
         selected_endpoints.append(name)
         for k in keys:
-            X_tgt, y_tgt = dic[name][k]['eeg'], dic[name][k]['labels']
+            y_tgt = dic[name][k]['labels']
 
             unique, counts = np.unique(y_tgt, return_counts=True)
             try:
@@ -1080,16 +1079,14 @@ def get_split_sample_id():
     mrna_data = loadmat(path0)
     meth_data = loadmat(path1)
     mrna_expression_data = loadmat(path2)
-    X_mrna, SampleName_mrna = mrna_data['X'].astype('float32'), mrna_data['SampleName']
-    X_meth, SampleName_meth = meth_data['X'].astype('float32'), meth_data['SampleName']
-    X_mrna_expression, SampleName_mrna_expression = mrna_expression_data['X'].astype('float32'), mrna_expression_data['SampleName']
+    SampleName_mrna = mrna_data['SampleName']
+    SampleName_meth = meth_data['SampleName']
+    SampleName_mrna_expression = mrna_expression_data['SampleName']
    
 
     SampleName_mrna = list([row[0][0][:12].split('-')[2] for row in SampleName_mrna])
     SampleName_meth = list([row[0][0][:12].split('-')[2] for row in SampleName_meth])
     SampleName_mrna_expression = list([row[0][0][:12].split('-')[2] for row in SampleName_mrna_expression])
-    # debug 
-    A = list(set(SampleName_mrna) & set(SampleName_meth))
     unique_patient_ids = list(set(SampleName_mrna).union(SampleName_meth, SampleName_mrna_expression))
 
     # sample half of patient ids to training and test ids 

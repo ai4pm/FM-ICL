@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score, log_loss, roc_auc_score
+from sklearn.metrics import f1_score, roc_auc_score
 
 import sys
 
@@ -113,32 +113,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--write-text", action="store_true", default=True)
     return parser.parse_args()
-
-
-def evaluate_predictions(y_true: np.ndarray, proba: np.ndarray) -> dict[str, float]:
-    y_true = np.asarray(y_true).ravel()
-    proba = np.asarray(proba, dtype=float)
-    if proba.ndim == 1:
-        proba = np.column_stack((1.0 - proba, proba))
-
-    y_pred = proba.argmax(axis=1)
-    try:
-        _ = log_loss(y_true, proba, labels=(0, 1))
-    except Exception:
-        pass
-
-    aucroc = np.nan
-    if len(np.unique(y_true)) >= 2:
-        try:
-            aucroc = float(roc_auc_score(y_true, proba[:, -1], average="macro"))
-        except Exception:
-            aucroc = np.nan
-
-    return {
-        "aucroc": aucroc,
-        "f1": float(f1_score(y_true, y_pred, average="macro")),
-        "error": float(1.0 - accuracy_score(y_true, y_pred)),
-    }
 
 
 def build_label_lookup(omics: str, target: str, year: int) -> dict[str, int]:

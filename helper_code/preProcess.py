@@ -415,7 +415,7 @@ def add_race_CT(tumorTypes, df, target, groups, Gender, data_Category, AE_MLTask
 
 def get_n_years(dataset, years):
     
-    X, T, C, E, R, G = dataset['X'], dataset['T'], dataset['C'], dataset['E'], dataset['R'], dataset['G']
+    X, T, C, R, G = dataset['X'], dataset['T'], dataset['C'], dataset['R'], dataset['G']
 
     df = pd.DataFrame(X)
     df['T'] = T
@@ -690,5 +690,4 @@ def run_cv_gender_race_comb(cancer_type, feature_type, target, genders, groups, 
         datasets.append(Data)
         
     return merge_datasets(datasets,AE_MLTask,PCA_FE_All)
-
 

@@ -1,9 +1,6 @@
-import copy
-import random as rn
 import importlib
 
 
-import pdb
 import numpy as np
 import sklearn.utils.validation as sklearn_validation
 
@@ -21,7 +18,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from tcga_training_utils import hyperparam_search_cv
-from sklearn.decomposition import PCA
 
 
 def _missing_advanced_transfer_learning(*_args, **_kwargs):
@@ -620,11 +616,6 @@ def develop_TL_AI(all_tr, ancestral_data_tr, test_data, prediction_dic, hyper_pa
     x_te = test_data[0]; 
 
 
-    # variables to be used 
-    count = 0
-    pred_prob = []
-    running_time = []
-
     # parameter to search 
     # batch_sizes=(16, 32, 64)
     # learning_rates=(1e-3, 3e-3, 1e-2)
@@ -679,6 +670,9 @@ def develop_TL_AI(all_tr, ancestral_data_tr, test_data, prediction_dic, hyper_pa
     timepoint2 = time.perf_counter() # pre-training model development
     time_spent =0
     time_spent += (timepoint2 - start)
+    count = 0
+    pred_prob = []
+    running_time = []
     sample_name = []
     te_sample_name = list(ancestral_data_tr.keys())
     for i, key in enumerate(te_sample_name):
@@ -1366,11 +1360,6 @@ def develop_DS_TL_AI_for_raw_sample_split(train_data, test_data, prediction_dic,
     train_tgt_X = scaler.transform(train_tgt_X)
     test_X = scaler.transform(test_X)
 
-    # variables to be used 
-    count = 0
-    pred_prob = []
-    running_time = []
-
     # parameter to search 
     if hyper_params_option == 1:
         batch_sizes=(8, )
@@ -1785,7 +1774,6 @@ def develop_Cont_Enhanced_ICL_AI_raw_sample_split(
     train_original_context_X = normalized_search_map["train_original"]
     train_core_context_X = normalized_search_map["train_core"]
     val_X_context = normalized_search_map["val_query"]
-    te_X_context = normalized_search_map["test_query"]
     val_context_X_search = [
         normalized_search_map[f"val_context_{idx}"] for idx in range(len(val_context_X))
     ]

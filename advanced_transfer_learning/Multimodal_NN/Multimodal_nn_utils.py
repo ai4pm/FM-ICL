@@ -6,13 +6,9 @@ import socket
 import numpy as np 
 import random as rn
 
-from typing import Any, Dict, List, Optional, Union, Tuple
-from pathlib import Path
-from tqdm import trange
+from typing import List, Optional, Union, Tuple
 
 from dataclasses import dataclass, field
-from sklearn.model_selection import train_test_split
-
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
@@ -113,53 +109,6 @@ def build_mlp(in_dim: int, h: HParams) -> nn.Module:
     return FeatureCNN1D(in_dim, h)
 
 
-class SafeBatchNorm1d(nn.BatchNorm1d):
-    def forward(self, input):
-        if self.training and input.ndim == 2 and input.shape[0] == 1:
-            return nn.functional.batch_norm(
-                input,
-                self.running_mean,
-                self.running_var,
-                self.weight,
-                self.bias,
-                False,
-                self.momentum,
-                self.eps,
-            )
-        return super().forward(input)
-
-
-class DenseMLP(nn.Module):
-    def __init__(self, in_dim: int, h: HParams):
-        super().__init__()
-        hidden_layers = [128, 64, 32, 16]
-        layers = []
-        current_dim = int(in_dim)
-        for hidden_dim in hidden_layers:
-            layers += [
-                nn.Linear(current_dim, hidden_dim),
-                SafeBatchNorm1d(hidden_dim),
-                nn.ReLU(inplace=True),
-                nn.Dropout(p=h.dropout),
-            ]
-            current_dim = hidden_dim
-
-        self.features = nn.Sequential(*layers)
-        self.output = nn.Linear(current_dim, 1)
-
-    def forward(self, x):
-        if x.ndim == 1:
-            x = x.view(1, -1)
-        elif x.ndim > 2:
-            x = x.view(x.shape[0], -1)
-        x = self.features(x)
-        return self.output(x)
-
-
-def build_dense_mlp(in_dim: int, h: HParams) -> nn.Module:
-    return DenseMLP(in_dim, h)
-
-
 def train_binary_mlp(
     X_train: Union[torch.Tensor, "np.ndarray"],
     y_train: Union[torch.Tensor, "np.ndarray"],   # float 0/1
@@ -184,33 +133,6 @@ def train_binary_mlp(
         y_val=y_val,
         val_split=val_split,
         model_builder=build_mlp,
-    )
-
-
-def train_binary_dense_mlp(
-    X_train: Union[torch.Tensor, "np.ndarray"],
-    y_train: Union[torch.Tensor, "np.ndarray"],   # float 0/1
-    *,
-    h: Optional[HParams] = None,
-    model: Optional[nn.Module] = None,
-    X_val: Optional[Union[torch.Tensor, "np.ndarray"]] = None,
-    y_val: Optional[Union[torch.Tensor, "np.ndarray"]] = None,
-    val_split: float = 0.33,
-) -> Tuple[nn.Module, float]:
-    """
-    Train the dense TL MLP and SAVE the best model
-    (lowest val loss; if no val, lowest train loss).
-    Returns: (model_loaded_with_best_state, best_metric_value)
-    """
-    return _train_binary_model(
-        X_train,
-        y_train,
-        h=h,
-        model=model,
-        X_val=X_val,
-        y_val=y_val,
-        val_split=val_split,
-        model_builder=build_dense_mlp,
     )
 
 
@@ -335,165 +257,11 @@ def _train_binary_model(
         model.load_state_dict(best_state)
     return model, best_metric
 
-def train_binary_mlp_and_predict(
-    X_train: Union[torch.Tensor, "np.ndarray"],
-    y_train: Union[torch.Tensor, "np.ndarray"],   # labels {0,1}
-    X_pred:  Union[torch.Tensor, "np.ndarray"],
-    h: Optional[HParams] = None,
-    balance_probabilities: bool = False,  # if True, adjust predicted probabilities by training class priors
-    comprise_source_domain: bool = False,  # If True, the model is trained on both source and target domain data
-) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-    """
-    Trains the 1D CNN for binary classification and returns predictions on X_pred.
-    Returns:
-      - if return_proba=False: y_hat (LongTensor of {0,1}, shape [N_pred])
-      - if return_proba=True:  (y_hat, p1) where p1 are probabilities for class 1
-    """
-    if h is None:
-        if comprise_source_domain:
-            h = HParams(batch_size=20, balance_probabilities=balance_probabilities)
-        else:
-            h = HParams(batch_size=4, balance_probabilities=balance_probabilities)
-    # device & seeding
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if h.seed is not None:
-        torch.manual_seed(h.seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(h.seed)
-
-    # to tensors
-    if not torch.is_tensor(X_train): X_train = torch.as_tensor(X_train)
-    if not torch.is_tensor(y_train): y_train = torch.as_tensor(y_train)
-    if not torch.is_tensor(X_pred):  X_pred  = torch.as_tensor(X_pred)
-
-    X_train = X_train.float()
-    X_pred  = X_pred.float()
-    # BCEWithLogitsLoss expects float targets 0.0/1.0
-    y_train = y_train.float().view(-1)
-
-    # ---- compute training class counts & priors (for balancing) ----
-    # class_counts_[0] = #negatives, class_counts_[1] = #positives
-    class_counts_ = torch.stack([(y_train == 0).sum(), (y_train == 1).sum()]).float()
-    eps = 1e-8
-    class_prob_in_train = class_counts_ / (class_counts_.sum() + eps)  # π = [π0, π1]
-
-    # model
-    in_dim = X_train.shape[1]
-    model = build_mlp(in_dim, h).to(device)
-
-    # data
-    dl = DataLoader(TensorDataset(X_train, y_train), batch_size=h.batch_size, shuffle=True)
-
-    # opt & sched
-    opt = torch.optim.SGD(
-        model.parameters(), lr=h.learning_rate, momentum=h.momentum, weight_decay=h.L2_reg
-    )
-    sched = None
-    if h.lr_decay and h.lr_decay > 0.0:
-        gamma = max(1e-8, 1.0 - h.lr_decay)
-        sched = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=gamma)
-
-    loss_fn = nn.BCEWithLogitsLoss()
-
-    # train
-    model.train()
-    for _ in range(h.n_epochs):
-        for xb, yb in dl:
-            xb, yb = xb.to(device), yb.to(device)
-            logit = model(xb).squeeze(1)          # shape [B]
-            loss = loss_fn(logit, yb)
-            if h.L1_reg and h.L1_reg > 0:
-                l1 = sum(p.abs().sum() for p in model.parameters())
-                loss = loss + h.L1_reg * l1
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
-            opt.step()
-        if sched is not None:
-            sched.step()
-
-    # predict
-    model.eval()
-    with torch.no_grad():
-        logits = model(X_pred.to(device)).squeeze(1)     # [N_pred]
-        probs = torch.sigmoid(logits)                    # p(class=1)
-        probs2 = torch.stack([1.0 - probs, probs], dim=-1)     # [N_pred, 2]
-        if h.balance_probabilities:
-            # Your requested balancing:
-            # output = output / class_prob_in_train; then renormalize across classes
-            priors = class_prob_in_train.to(device) + eps
-            probs2 = probs2 / priors                     # divide by training class priors
-            probs2 = probs2 / probs2.sum(dim=-1, keepdim=True)  # renormalize
-   
-        probs2 = probs2.cpu()
-        return probs2
-
 # helper: logits -> [N, 2] proba for compute_metrics(...)
 def _probs_from_logits_binary(logits_np: np.ndarray) -> np.ndarray:
     # p1 = 1.0 / (1.0 + np.exp(-logits_np))
     p1 = 1.0 / (1.0 + np.exp(-np.clip(logits_np, -500, 500)))
     return np.stack([1.0 - p1, p1], axis=1)
-
-def evaluate_target_fractions(
-    *,
-    fracs,
-    model: nn.Module, 
-    fold_idx: int,
-    SEED: int,
-    in_dim: int,                  # input feature dimension
-    tgt_X, tgt_y,
-    base_hparams,                 # HParams for source model (for building net)
-    finetune_hparams,             # HParams for target fine-tuning
-    tgt_ft_all, tgt_def_all,      # dict collectors: {frac: {"logloss":[], "auc":[], "error":[]}}
-    test_size: float = 0.5,       # test size of target
-    val_split: float = 0.1,       # validation split for fine-tuning
-):
-    # Import lazily so DS/TL training does not depend on the heavier data_utils
-    # module chain unless this evaluation helper is actually used.
-    from data_utils import compute_metrics, stratified_fraction
-
-    tgt_X_tr, tgt_X_te, tgt_y_tr, tgt_y_te = train_test_split(
-        tgt_X, tgt_y, test_size=test_size, stratify=tgt_y, random_state=SEED 
-    )
-
-    """Evaluate source-only vs fine-tuned across target fractions and collect metrics."""
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model.eval()
-    with torch.no_grad():
-        logits = model(torch.tensor(tgt_X_te, dtype=torch.float32)).squeeze(1).cpu().numpy()
-    proba_def = _probs_from_logits_binary(logits)
-    m_def = compute_metrics(tgt_y_te, proba_def)
-  
-    for f in fracs:
-
-        sub_X, sub_y = stratified_fraction(tgt_X_tr, tgt_y_tr, frac=f, seed=SEED)
-        _, _, ft_model = train_binary_mlp(
-            X_train=sub_X, y_train=sub_y,
-            h=finetune_hparams,
-            val_split=val_split,
-            model = model, 
-        )
-
-        # fine-tuned on target test
-        ft_model.eval()
-        with torch.no_grad():
-            logits_ft = ft_model(torch.tensor(tgt_X_te, dtype=torch.float32).to(device)).squeeze(1).cpu().numpy()
-        proba_ft = _probs_from_logits_binary(logits_ft)
-        m_ft = compute_metrics(tgt_y_te, proba_ft)
-
-
-        # --- accumulate + print ---
-        for k in ("logloss", "auc", "error"):
-            tgt_ft_all[f][k].append(m_ft[k])
-            tgt_def_all[f][k].append(m_def[k])
-
-        label = "zero-shot" if f == 0.0 else f"{int(f*100)}%"
-        print(f"[Fold {fold_idx:02d} | Target {label:>8}] "
-                f"LL Ft:{m_ft['logloss']:.6f} Src:{m_def['logloss']:.6f} | "
-                f"AUC Ft:{m_ft['auc']:.6f} Src:{m_def['auc']:.6f} | "
-                f"Err Ft:{m_ft['error']:.6f} Src:{m_def['error']:.6f}")
-    return tgt_ft_all, tgt_def_all
 
 # ======================================
 # The module of the distributed training  

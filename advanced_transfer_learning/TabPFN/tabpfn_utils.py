@@ -1,7 +1,6 @@
 import numpy as np 
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import pairwise_distances
-from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
+from sklearn.neighbors import NearestNeighbors
 from tabpfn import TabPFNClassifier
 
 
@@ -351,43 +350,3 @@ def _radius_search_context_cls_by_class(
         )
         selected.extend(np.where(src_mask)[0][np.asarray(local, dtype=int)].tolist())
     return np.array(sorted(set(selected)), dtype=int)
-
-# a context enhancement scheme that includes unexplored source data and
-# similar samples in the feature space only.
-def search_context_cls2(
-    A: np.ndarray, y_A: np.ndarray,
-    B: np.ndarray, y_B: np.ndarray,
-    k: int = 1, random_state: int | None = None
-) -> np.ndarray:
-    # include unexplored data from the source domain
-    ind_exclude_candidate = search_mst_context(A, B)
-    ind_unexplore = np.array(list(set(np.arange(len(A))) - set(ind_exclude_candidate)))
-
-     # include unexplored data from the source domain
-    ind_similar_joint_x_y = search_mst_context(A[ind_exclude_candidate], B)
-    ind_search_rel = np.hstack((ind_unexplore, ind_exclude_candidate[ind_similar_joint_x_y]))
-
-    return ind_search_rel
-
-
-# knn classifiers 
-def search_context_cls3(
-    A: np.ndarray, y_A: np.ndarray,
-    B: np.ndarray, y_B: np.ndarray,
-    k: int = 1, 
-) -> np.ndarray:
-    # Fit k-NN classifier on A ∪ B
-    clf = KNeighborsClassifier(n_neighbors=k)
-    X_all = np.vstack((A, B))
-    y_all = np.hstack((np.zeros(len(A)), np.ones(len(B))))
-    clf.fit(X_all, y_all)
-
-    # Predict labels for A (re-extract first |A| samples)
-    X_A = X_all[:len(A)]
-    y_pred = clf.predict(X_A)
-
-    # Return indices of A classified as class B (i.e., y_pred == 1 or whatever)
-    ind_search_rel = np.where(y_pred == 1)[0]  # Adjust label if needed
-    
-
-    return ind_search_rel

@@ -401,19 +401,6 @@ def load_tcga_baseline_means() -> dict[tuple[str, str], tuple[float, int]]:
     return result
 
 
-def external_feature_mode(row: pd.Series) -> str:
-    task = str(row["task"])
-    if task == "GENEVA":
-        return "pca400_clin57_ctxpca20"
-    if task == "OncoArray-Omics":
-        return "pca300"
-    if task == "OncoArray-Omics+Clin":
-        return "pca300_clinagesmoke"
-    if task == TOPMED_TASK:
-        return TOPMED_FEATURE_MODE
-    raise ValueError(f"Unexpected external task: {task}")
-
-
 def load_external_baseline_means(include_topmed: bool = False) -> dict[tuple[str, str], tuple[float, int]]:
     summaries = {
         "GENEVA": pd.read_csv(GENEVA_SUMMARY),
